@@ -1,2 +1,0 @@
-【Test1】 N=1080 T=10  turns=10k   n=500	Loss: 3.073e+03	Loss: 4.753e+02
-【Test】

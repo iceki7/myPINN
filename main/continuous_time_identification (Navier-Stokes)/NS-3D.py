@@ -54,7 +54,7 @@ class PhysicsInformedNN:
         self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
                                                      log_device_placement=True))
         
-        # placeHolder都是之后需要用dict输入的变量（训练数据）或网络的训练结果
+        # placeHolder都是之后需要用dict输入的变量（训练数据）
         self.x_tf = tf.placeholder(tf.float32, shape=[None, self.x.shape[1]])
         self.y_tf = tf.placeholder(tf.float32, shape=[None, self.y.shape[1]])
         self.z_tf = tf.placeholder(tf.float32, shape=[None, self.z.shape[1]])
@@ -206,6 +206,8 @@ class PhysicsInformedNN:
                 elapsed = time.time() - start_time
                 
                 #通过run获取此时最新的loss值、lambda
+
+                #一次送入的tf_dict就是一个batch
                 loss_value = self.sess.run(self.loss, tf_dict)
 
 
@@ -222,15 +224,16 @@ class PhysicsInformedNN:
             
     
     #输入一个dict，并run这个变量进行预测
-    def predict(self, x_star, y_star, t_star):
+    def predict(self, x_star, y_star, z_star, t_star):
         
-        tf_dict = {self.x_tf: x_star, self.y_tf: y_star, self.t_tf: t_star}
+        tf_dict = {self.x_tf: x_star, self.y_tf: y_star,self.z_tf: z_star, self.t_tf: t_star}
         
         u_star = self.sess.run(self.u_pred, tf_dict)
         v_star = self.sess.run(self.v_pred, tf_dict)
+        w_star = self.sess.run(self.w_pred, tf_dict)
         p_star = self.sess.run(self.p_pred, tf_dict)
         
-        return u_star, v_star, p_star
+        return u_star, v_star,w_star, p_star
 
 def plot_solution(X_star, u_star, index):
     
@@ -260,7 +263,7 @@ def axisEqual3D(ax):
         
 if __name__ == "__main__": 
       
-      #3D版的改进：粒子法
+      #3D改进：粒子法
       #     输出u,v,w,p
       #     将divergence-free作为一个pde loss，硬约束改软约束
       # x y z t → u v w p → AD(lambda)→loss
@@ -271,8 +274,14 @@ if __name__ == "__main__":
       #x y t →MLP  psi p →AD(lambda)→loss
       #DD discovery
 
-    N_train = 500
-    turns = 10000    #训练次数=20w,节点5k
+    #Batch Size： 计算梯度所需的样本数量，太小会导致效率低下，无法收敛。
+    # 太大会导致内存撑不住，Batch Size增大到一定程度后，其下降方向变化很小了，所以Batch Size是一个很重要的参数。
+    # 全部样本训练完算一个epoch.
+    # batch_size*batch(=iter=step)=epoch
+    # 在运行完一个batch_size的数据，即一个iteration后，之后才会进行反向传播，更新参数。
+
+    N_train = 500   #params
+    turns = 10000    #NS-2D：训练次数=20w,节点5k
 
     #layers = [3, 20, 20, 20, 20, 20, 20, 20, 20, 2]
     layers = [4, 20, 20, 20, 20, 20, 20, 20, 20, 4]
@@ -296,7 +305,7 @@ if __name__ == "__main__":
     # XX = np.tile(X_star[:,0:1], (1,T)) # N x T
     # YY = np.tile(X_star[:,1:2], (1,T)) # N x T
     # TT = np.tile(t_star, (1,N)).T # N x T
-    XX = pos_star[:,:,0]# T N
+    XX = pos_star[:,:,0]# T N   #使用粒子法时，不同时刻的坐标也不同
     YY = pos_star[:,:,1]#
     ZZ = pos_star[:,:,2]#
     TT = np.tile(t_star.T, (1,N)) # T N
@@ -354,26 +363,28 @@ if __name__ == "__main__":
     # y_star = X_star[:,1:2]
     # t_star = TT[:,snap]
 
-    # u_star = U_star[:,0,snap]
+    # u_star = U_star[:,0,snap]#N 1 snap
     # v_star = U_star[:,1,snap]
-    # p_star = P_star[:,snap]
+    # #p_star = P_star[:,snap]
     
-    # # Prediction
-    # u_pred, v_pred, p_pred = model.predict(x_star, y_star, t_star)
-    # lambda_1_value = model.sess.run(model.lambda_1)
-    # lambda_2_value = model.sess.run(model.lambda_2)
+    # # # Prediction
+    # u_pred, v_pred,w_pred, p_pred = model.predict(x_star, y_star,z_star, t_star)
+    # # lambda_1_value = model.sess.run(model.lambda_1)
+    # # lambda_2_value = model.sess.run(model.lambda_2)
     
-    # # Error
+    # # # Error
     # error_u = np.linalg.norm(u_star-u_pred,2)/np.linalg.norm(u_star,2)
     # error_v = np.linalg.norm(v_star-v_pred,2)/np.linalg.norm(v_star,2)
-    # error_p = np.linalg.norm(p_star-p_pred,2)/np.linalg.norm(p_star,2)
+    # error_w = np.linalg.norm(w_star-w_pred,2)/np.linalg.norm(w_star,2)
+    # #error_p = np.linalg.norm(p_star-p_pred,2)/np.linalg.norm(p_star,2)
 
-    # error_lambda_1 = np.abs(lambda_1_value - 1.0)*100
-    # error_lambda_2 = np.abs(lambda_2_value - 0.01)/0.01 * 100
+    # # error_lambda_1 = np.abs(lambda_1_value - 1.0)*100
+    # # error_lambda_2 = np.abs(lambda_2_value - 0.01)/0.01 * 100
     
     # print('Error u: %e' % (error_u))    
-    # print('Error v: %e' % (error_v))    
-    # print('Error p: %e' % (error_p))    
+    # print('Error v: %e' % (error_v))   
+    # print('Error w: %e' % (error_w))   
+    #print('Error p: %e' % (error_p))    
     # print('Error l1: %.5f%%' % (error_lambda_1))                             
     # print('Error l2: %.5f%%' % (error_lambda_2))                  
     
