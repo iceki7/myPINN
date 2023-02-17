@@ -1,0 +1,11 @@
+
+无黏度版本：
+
+采样大小：N=5000	 	Iterations=100k 
+【数据集】
+T=99	node=1080	粒子法
+
+batch=64		e+1
+batch=128	e+2
+batch=256	e+2
+

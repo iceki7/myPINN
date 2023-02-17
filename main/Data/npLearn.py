@@ -1,5 +1,6 @@
 import numpy as np
 import scipy
+import time
 
 # idx = np.random.choice(20,7, replace=False)
 # print(idx)
@@ -40,9 +41,9 @@ import scipy
 # print(TT)  #T N
 
 
-pos_star=scipy.io.loadmat('main/Data/pos.mat')['pos'] #T N 3
-vel_star=scipy.io.loadmat('main/Data/vel.mat')['vel'] #T N 3
-t_star=scipy.io.loadmat('main/Data/time.mat')['time'] #1 T
+pos_star=scipy.io.loadmat('main/Data/test2/pos.mat')['pos'] #T N 3
+vel_star=scipy.io.loadmat('main/Data/test2/vel.mat')['vel'] #T N 3
+t_star=scipy.io.loadmat('main/Data/test2/time.mat')['time'] #1 T
 #mat 内容：
 # N=5000 T=200
 #时间等间距
@@ -70,3 +71,49 @@ VV = vel_star[:,:,1] #
 WW = vel_star[:,:,2] # 
 print('UU shape')
 print(UU.shape)
+    
+x = XX.flatten()[:,None] # TN x 1
+y = YY.flatten()[:,None] #
+z = ZZ.flatten()[:,None] #
+t = TT.flatten()[:,None] #
+
+u = UU.flatten()[:,None] # TN 1 
+v = VV.flatten()[:,None] #
+w = WW.flatten()[:,None] #
+#p = PP.flatten()[:,None] #
+
+######################################################################
+######################## Noiseles Data ###############################
+######################################################################
+# Training Data    
+
+#随机在整个N×T 时空域上取5k点作为训练集
+N_train=32
+idx = np.random.choice(N*T, N_train, replace=False)
+x_train = x[idx,:]
+y_train = y[idx,:]
+z_train = z[idx,:]
+
+t_train = t[idx,:]
+u_train = u[idx,:]
+v_train = v[idx,:]
+w_train = w[idx,:]
+print('u_train shape')
+print(u_train.shape)
+
+
+#batch 划分
+batch=10
+now=0
+print()
+while(True):
+    
+    if(now+batch<=N_train):
+        ub=u_train[now:now+batch,:] #选择batch个数据  
+        now+=batch
+    else:
+        ub=u_train[now:N_train,:] #选择batch个数据
+        now=0  
+    print('ub shape')
+    print(ub.shape)
+    time.sleep(5)

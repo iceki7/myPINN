@@ -23,10 +23,14 @@ tf.set_random_seed(1234)
 
 class PhysicsInformedNN:
     # Initialize the class
-    def __init__(self, x,y,z,t,u,v,w, layers):
+    def __init__(self, x,y,z,t,u,v,w, layers,N_train):
         
         X = np.concatenate([x,y,z,t], 1)
         
+        self.batchSize=256 # params
+        self.batchBegin=0 #临时变量，当前batch的起始序号
+        self.N_train=N_train
+
         self.lb = X.min(0)
         self.ub = X.max(0)
                 
@@ -39,7 +43,14 @@ class PhysicsInformedNN:
         
         self.u = u
         self.v = v
-        self.w = w     
+        self.w = w
+
+        print('self.u shape=')
+        print(self.u.shape)  #N_train 1   
+
+        
+        print('self.x shape=')
+        print(self.x.shape)  #N_train 1
 
         self.layers = layers
         
@@ -68,7 +79,7 @@ class PhysicsInformedNN:
         #得到最终的预测结果。也即 MLP + AD
         self.u_pred, self.v_pred,self.w_pred,self.p_pred,\
         self.f_u_pred, self.f_v_pred,self.f_w_pred,\
-        self.g_pred = self.net_NS(self.x_tf, self.y_tf, self.z_tf,self.t_tf)
+        self.divFree_pred = self.net_NS(self.x_tf, self.y_tf, self.z_tf,self.t_tf)
         
         #计算LOSS    Data loss      NS Loss     div     Loss     
         self.loss = tf.reduce_sum(tf.square(self.u_tf - self.u_pred)) + \
@@ -77,7 +88,7 @@ class PhysicsInformedNN:
                     tf.reduce_sum(tf.square(self.f_u_pred)) + \
                     tf.reduce_sum(tf.square(self.f_v_pred)) + \
                     tf.reduce_sum(tf.square(self.f_w_pred)) + \
-                    tf.reduce_sum(tf.square(self.g_pred))   #无散条件
+                    tf.reduce_sum(tf.square(self.divFree_pred))   #无散条件
                     
         self.optimizer = tf.contrib.opt.ScipyOptimizerInterface(self.loss, 
                                                                 method = 'L-BFGS-B', 
@@ -151,24 +162,24 @@ class PhysicsInformedNN:
         u_t = tf.gradients(u, t)[0]
         u_x = tf.gradients(u, x)[0]
         u_y = tf.gradients(u, y)[0]
-        u_xx = tf.gradients(u_x, x)[0]
-        u_yy = tf.gradients(u_y, y)[0]
+        # u_xx = tf.gradients(u_x, x)[0]
+        # u_yy = tf.gradients(u_y, y)[0]
         u_z = tf.gradients(u, z)[0]    
-        u_zz = tf.gradients(u_z, z)[0]    
+        # u_zz = tf.gradients(u_z, z)[0]    
         
         v_t = tf.gradients(v, t)[0]
         v_x = tf.gradients(v, x)[0]
         v_y = tf.gradients(v, y)[0]
-        v_xx = tf.gradients(v_x, x)[0]
-        v_yy = tf.gradients(v_y, y)[0]
+        # v_xx = tf.gradients(v_x, x)[0]
+        # v_yy = tf.gradients(v_y, y)[0]
         v_z = tf.gradients(v, z)[0]    
-        v_zz = tf.gradients(v_z, z)[0]    
+        # v_zz = tf.gradients(v_z, z)[0]    
 
         w_t = tf.gradients(w, t)[0]
         w_x = tf.gradients(w, x)[0]
         w_y = tf.gradients(w, y)[0]
-        w_xx = tf.gradients(w_x, x)[0]
-        w_yy = tf.gradients(w_y, y)[0]
+        #w_xx = tf.gradients(w_x, x)[0]
+        #w_yy = tf.gradients(w_y, y)[0]
         w_z = tf.gradients(w, z)[0]    
         w_zz = tf.gradients(w_z, z)[0]    
 
@@ -180,27 +191,63 @@ class PhysicsInformedNN:
         # f_u = u_t + lambda_1*(u*u_x + v*u_y) + p_x - lambda_2*(u_xx + u_yy) 
         # f_v = v_t + lambda_1*(u*v_x + v*v_y) + p_y - lambda_2*(v_xx + v_yy)
         
-        f_u = u_t + lambda_1*(u*u_x + v*u_y + w*u_z) + p_x - lambda_2*(u_xx + u_yy + u_zz) 
-        f_v = v_t + lambda_1*(u*v_x + v*v_y + w*v_z) + p_y - lambda_2*(v_xx + v_yy + v_zz)  
-        f_w = w_t + lambda_1*(u*w_x + v*w_y + w*w_z) + p_z - lambda_2*(w_xx + w_yy + w_zz)  
+        # f_u = u_t + lambda_1*(u*u_x + v*u_y + w*u_z) + p_x - lambda_2*(u_xx + u_yy + u_zz)-gravity 
+        # f_v = v_t + lambda_1*(u*v_x + v*v_y + w*v_z) + p_y - lambda_2*(v_xx + v_yy + v_zz)-gravity  
+        # f_w = w_t + lambda_1*(u*w_x + v*w_y + w*w_z) + p_z - lambda_2*(w_xx + w_yy + w_zz)-gravity  
         
-        g=u_x+v_y+w_z
+        gravity= tf.constant(-9.8)
+
+        # 无粘度
+        f_u = u_t + lambda_1*(u*u_x + v*u_y + w*u_z) + p_x 
+        f_v = v_t + lambda_1*(u*v_x + v*v_y + w*v_z) + p_y -gravity   # y<0重力方向
+        f_w = w_t + lambda_1*(u*w_x + v*w_y + w*w_z) + p_z 
+
+
+        div_free=u_x+v_y+w_z
         
-        return u,v,w,p, f_u,f_v,f_w,g
+        return u,v,w,p, f_u,f_v,f_w,div_free
     
     def callback(self, loss, lambda_1, lambda_2):
         print('Loss: %.3e, l1: %.3f, l2: %.5f' % (loss, lambda_1, lambda_2))
-      
-    def train(self, nIter): 
+    
+    def next_batch(self):
 
-        tf_dict = {self.x_tf: self.x, self.y_tf: self.y,self.z_tf: self.z,self.t_tf: self.t,
-                   self.u_tf: self.u, self.v_tf: self.v,self.w_tf: self.w}
+        begin=self.batchBegin
+        if(self.batchBegin+self.batchSize<=self.N_train):
+            end=self.batchBegin+self.batchSize #选择batch个数据  
+            self.batchBegin += self.batchSize
+        else:
+            end=self.N_train
+            self.batchBegin=0  
+
+        x_batch=self.x[begin:end,:]
+        y_batch=self.y[begin:end,:]
+        z_batch=self.z[begin:end,:]
+        t_batch=self.t[begin:end,:]
+        u_batch=self.u[begin:end,:]
+        v_batch=self.v[begin:end,:]
+        w_batch=self.w[begin:end,:]      
+
+        return x_batch,y_batch,z_batch,t_batch,u_batch,v_batch,w_batch
+
+
+    def train(self, nIter): 
+        # tf_dict = {self.x_tf: self.x, self.y_tf: self.y,self.z_tf: self.z,self.t_tf: self.t,
+        #            self.u_tf: self.u, self.v_tf: self.v,self.w_tf: self.w}
         
+            
         start_time = time.time()
         for it in range(nIter):
             #之后的训练都是run这个train_op_Adam
-            self.sess.run(self.train_op_Adam, tf_dict)
-            
+            x_batch,y_batch,z_batch,t_batch,u_batch,v_batch,w_batch=self.next_batch()
+            #print('x_batch shape')
+            #print(x_batch.shape)
+            #time.sleep(1)
+            tf_dict = {self.x_tf: x_batch, self.y_tf: y_batch,self.z_tf: z_batch,self.t_tf: t_batch,
+                self.u_tf: u_batch, self.v_tf: v_batch,self.w_tf: w_batch}
+
+            self.sess.run(self.train_op_Adam,tf_dict)
+              
             # Print
             if it % 10 == 0:
                 elapsed = time.time() - start_time
@@ -217,6 +264,8 @@ class PhysicsInformedNN:
                       (it, loss_value, lambda_1_value, lambda_2_value, elapsed))
                 start_time = time.time()
             
+            
+        #注意改用batch后，这个只优化了一个batch
         self.optimizer.minimize(self.sess,
                                 feed_dict = tf_dict,
                                 fetches = [self.loss, self.lambda_1, self.lambda_2],
@@ -280,8 +329,13 @@ if __name__ == "__main__":
     # batch_size*batch(=iter=step)=epoch
     # 在运行完一个batch_size的数据，即一个iteration后，之后才会进行反向传播，更新参数。
 
-    N_train = 500   #params
-    turns = 10000    #NS-2D：训练次数=20w,节点5k
+
+    # 网络预测出来的是速度   用速度还原粒子路径
+    # 比对loss、测试样例、以及渲染可视化的结果（比对GroundTruth和Prediction的粒子轨迹）
+
+
+    N_train = 5000   #params 训练集的完整大小
+    turns = 100000   #NS-2D：训练次数=20w,节点5k
 
     #layers = [3, 20, 20, 20, 20, 20, 20, 20, 20, 2]
     layers = [4, 20, 20, 20, 20, 20, 20, 20, 20, 4]
@@ -294,6 +348,7 @@ if __name__ == "__main__":
     # t_star = data['t'] # T x 1
     # X_star = data['X_star'] # N x 2
 
+    #根路径可能是打开的文件夹目录/这个文件所在的目录
     pos_star=scipy.io.loadmat('../Data/pos.mat')['pos']#T N 3
     t_star=scipy.io.loadmat('../Data/time.mat')['time']#1 T 等间距
     vel_star=scipy.io.loadmat('../Data/vel.mat')['vel']#T N 3
@@ -353,38 +408,40 @@ if __name__ == "__main__":
     # Training
     model = PhysicsInformedNN(
         x_train, y_train,z_train,t_train, 
-        u_train, v_train,w_train, layers)
+        u_train, v_train,w_train, layers,N_train)
     model.train(turns)
+
+    
     
     # 测试数据
     #测试是选取100个snapshot，对所有点进行测试
-    # snap = np.array([100])
-    # x_star = X_star[:,0:1] #N 1
-    # y_star = X_star[:,1:2]
-    # t_star = TT[:,snap]
+    snap = np.array([100])
+    x_star = pos_star[snap,:,0:1][0] # T=100 N
+    y_star = X_star[:,1:2]
+    t_star = TT[:,snap]
 
-    # u_star = U_star[:,0,snap]#N 1 snap
-    # v_star = U_star[:,1,snap]
-    # #p_star = P_star[:,snap]
+    u_star = U_star[:,0,snap]#N 1 snap
+    v_star = U_star[:,1,snap]
+    #p_star = P_star[:,snap]
     
-    # # # Prediction
-    # u_pred, v_pred,w_pred, p_pred = model.predict(x_star, y_star,z_star, t_star)
-    # # lambda_1_value = model.sess.run(model.lambda_1)
-    # # lambda_2_value = model.sess.run(model.lambda_2)
+    # # Prediction
+    u_pred, v_pred,w_pred, p_pred = model.predict(x_star, y_star,z_star, t_star)
+    # lambda_1_value = model.sess.run(model.lambda_1)
+    # lambda_2_value = model.sess.run(model.lambda_2)
     
-    # # # Error
-    # error_u = np.linalg.norm(u_star-u_pred,2)/np.linalg.norm(u_star,2)
-    # error_v = np.linalg.norm(v_star-v_pred,2)/np.linalg.norm(v_star,2)
-    # error_w = np.linalg.norm(w_star-w_pred,2)/np.linalg.norm(w_star,2)
-    # #error_p = np.linalg.norm(p_star-p_pred,2)/np.linalg.norm(p_star,2)
+    # # Error
+    error_u = np.linalg.norm(u_star-u_pred,2)/np.linalg.norm(u_star,2)
+    error_v = np.linalg.norm(v_star-v_pred,2)/np.linalg.norm(v_star,2)
+    error_w = np.linalg.norm(w_star-w_pred,2)/np.linalg.norm(w_star,2)
+    #error_p = np.linalg.norm(p_star-p_pred,2)/np.linalg.norm(p_star,2)
 
-    # # error_lambda_1 = np.abs(lambda_1_value - 1.0)*100
-    # # error_lambda_2 = np.abs(lambda_2_value - 0.01)/0.01 * 100
+    # error_lambda_1 = np.abs(lambda_1_value - 1.0)*100
+    # error_lambda_2 = np.abs(lambda_2_value - 0.01)/0.01 * 100
     
-    # print('Error u: %e' % (error_u))    
-    # print('Error v: %e' % (error_v))   
-    # print('Error w: %e' % (error_w))   
-    #print('Error p: %e' % (error_p))    
+    print('Error u: %e' % (error_u))    
+    print('Error v: %e' % (error_v))   
+    print('Error w: %e' % (error_w))   
+    print('Error p: %e' % (error_p))    
     # print('Error l1: %.5f%%' % (error_lambda_1))                             
     # print('Error l2: %.5f%%' % (error_lambda_2))                  
     
