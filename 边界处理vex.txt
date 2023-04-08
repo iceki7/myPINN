@@ -1,0 +1,78 @@
+float zlim=1.42;
+float xlim=0.72;
+
+float delta=5;
+
+float ylim=1.9;//positive value
+if(@P.y>=0){
+removepoint(0,@ptnum);
+}
+if(@P.y>=-ylim&& 
+@P.z<=zlim&&@P.z>=-zlim&&
+@P.x<=xlim&&@P.x>=-xlim){
+    //@P.z=3;
+    removepoint(0,@ptnum);
+}
+//@P.z+=delta;
+
+---------------------------------
+SOLID:
+%过滤出固体粒子
+float zlim=1.7;
+float xlim=1;
+
+float delta=5;
+
+if(@P.y>=-0.14){
+removepoint(0,@ptnum);
+}
+
+if(
+@P.z<=zlim&&@P.z>=-zlim&&
+@P.x<=xlim-0.1&&@P.x>=-xlim&&@P.y>=-2.2){
+    removepoint(0,@ptnum);
+}
+//@P.z+=delta;
+   
+
+matlab：		reshape(pos2,8200,3)
+
+
+---------------------------------------------------------------
+%过滤出边界流体粒子.
+
+xi=1;
+yi=2;
+zi=3;
+xlim=0.72;
+zlim=1.42;
+
+T=time;
+for i=1:1080-1
+	T=[T;time];%
+end
+T=reshape(T',[99*1080,1]);%要为每个粒子单独安排一个时间。内容：0，1，2....0,1,2....
+A=reshape(pos,[99*1080,3]);
+B=reshape(vel,[99*1080,3]);
+[r,c]=size(A);
+del=[]%要删除的粒子序号
+
+
+	for i=1:r 
+		tpos=A(i,:);
+		if tpos(yi)>=0
+			del=[del i];
+		elseif tpos(yi)>=-1.9&&abs(tpos(zi))<=zlim &&  abs(tpos(xi))<=xlim
+			del=[del i];
+		end
+	end
+A(del,:)=[];
+B(del,:)=[];
+T(del,:)=[];
+
+pos=A
+vel=B
+timeEachParticle=T
+---------------------------------
+
+
